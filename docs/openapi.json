@@ -330,6 +330,97 @@
         "x-agent-enabled": true
       }
     },
+    "/api/v1/rooms/{public_id}/messages/stream": {
+      "get": {
+        "tags": [
+          "rooms"
+        ],
+        "summary": "Stream Messages",
+        "operationId": "stream_messages_api_v1_rooms__public_id__messages_stream_get",
+        "parameters": [
+          {
+            "name": "public_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Public Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "name": "magery_access_key",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Magery Access Key"
+            }
+          },
+          {
+            "name": "magery_guest_key",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Magery Guest Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-Sent Events stream of room events",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-agent-enabled": true
+      }
+    },
     "/api/v1/links/{link_hash}/join": {
       "post": {
         "tags": [
