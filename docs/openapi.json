@@ -591,6 +591,24 @@
         ],
         "title": "MessageListResponse"
       },
+      "ParticipantItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "role"
+        ],
+        "title": "ParticipantItem"
+      },
       "RoomResponse": {
         "properties": {
           "id": {
@@ -620,7 +638,7 @@
           },
           "participants": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ParticipantItem"
             },
             "type": "array",
             "title": "Participants"
