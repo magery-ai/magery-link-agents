@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -122,6 +123,16 @@ def test_format_openclaw_payload_matches_the_confirmed_shape():
     message = {"authorName": "alice", "message": "hello"}
     assert bridge.format_openclaw_payload(message) == {
         "text": "[Magery] alice: hello", "source": "magery-link",
+    }
+
+
+def test_format_sessions_send_payload_matches_the_specified_shape():
+    message = {"authorName": "alice", "message": "hello"}
+    assert bridge.format_sessions_send_payload(
+        message, "agent:main:telegram:default:direct:XXXXXXXX",
+    ) == {
+        "key": "agent:main:telegram:default:direct:XXXXXXXX",
+        "message": "📨 Magery | alice: hello",
     }
 
 
@@ -445,6 +456,40 @@ def test_emit_webhook_posts_the_formatted_body_with_custom_headers():
     }
 
 
+def test_emit_sessions_send_calls_the_openclaw_cli_with_the_formatted_payload():
+    message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
+    with patch("bridge.subprocess.run") as mock_run:
+        bridge.emit_sessions_send(
+            message, room_id="room-1", room_label="test",
+            session_key="agent:main:telegram:default:direct:XXXXXXXX",
+        )
+    mock_run.assert_called_once()
+    assert mock_run.call_args.args[0] == [
+        "openclaw", "gateway", "call", "sessions.send",
+        "--params", json.dumps({
+            "key": "agent:main:telegram:default:direct:XXXXXXXX",
+            "message": "📨 Magery | alice: hi",
+        }),
+        "--json", "--timeout", "5000",
+    ]
+    assert mock_run.call_args.kwargs == {
+        "capture_output": True, "text": True, "timeout": 10, "check": True,
+    }
+
+
+def test_emit_sessions_send_surfaces_stderr_on_a_failed_openclaw_call():
+    message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
+    error = subprocess.CalledProcessError(
+        returncode=1, cmd=["openclaw"], stderr="gateway auth error: invalid token",
+    )
+    with patch("bridge.subprocess.run", side_effect=error):
+        with pytest.raises(RuntimeError, match="gateway auth error: invalid token"):
+            bridge.emit_sessions_send(
+                message, room_id="room-1", room_label="test",
+                session_key="agent:main:telegram:default:direct:XXXXXXXX",
+            )
+
+
 # ---------------------------------------------------------------------------
 # run_room()
 # ---------------------------------------------------------------------------
@@ -616,6 +661,11 @@ def test_parse_args_requires_webhook_url_for_webhook_mode():
         bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "webhook"])
 
 
+def test_parse_args_requires_session_key_for_sessions_send_mode():
+    with pytest.raises(SystemExit):
+        bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "sessions-send"])
+
+
 def test_parse_args_accepts_a_valid_single_room_invocation():
     args = bridge.parse_args(["--access-key", "k", "--room-id", "r"])
     assert args.access_key == "k"
@@ -639,6 +689,30 @@ def test_parse_args_gateway_url_cli_flag_overrides_env_var():
     with patch.dict("os.environ", {"MAGERY_GATEWAY_URL": "http://example:9999"}):
         args = bridge.parse_args(["--access-key", "k", "--room-id", "r", "--gateway-url", "http://cli:1111"])
     assert args.gateway_url == "http://cli:1111"
+
+
+def test_parse_args_accepts_sessions_send_mode_with_a_session_key():
+    args = bridge.parse_args([
+        "--access-key", "k", "--room-id", "r", "--mode", "sessions-send",
+        "--session-key", "agent:main:telegram:default:direct:XXXXXXXX",
+    ])
+    assert args.mode == "sessions-send"
+    assert args.session_key == "agent:main:telegram:default:direct:XXXXXXXX"
+
+
+def test_parse_args_session_key_can_be_set_via_env_var():
+    with patch.dict("os.environ", {"MAGERY_SESSION_KEY": "agent:main:telegram:default:direct:YYYYYYYY"}):
+        args = bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "sessions-send"])
+    assert args.session_key == "agent:main:telegram:default:direct:YYYYYYYY"
+
+
+def test_parse_args_session_key_cli_flag_overrides_env_var():
+    with patch.dict("os.environ", {"MAGERY_SESSION_KEY": "agent:main:telegram:default:direct:YYYYYYYY"}):
+        args = bridge.parse_args([
+            "--access-key", "k", "--room-id", "r", "--mode", "sessions-send",
+            "--session-key", "agent:main:telegram:default:direct:ZZZZZZZZ",
+        ])
+    assert args.session_key == "agent:main:telegram:default:direct:ZZZZZZZZ"
 
 
 # ---------------------------------------------------------------------------

@@ -25,7 +25,7 @@ a share link, reading message history, and posting messages.
 - [docs/room-model.md](docs/room-model.md) — what a room, participant, and message are
 - [docs/openapi.json](docs/openapi.json) — generated OpenAPI 3 spec, agent-accessible routes only
 - [examples/python/](examples/python/) — a minimal working example: join a room, read history, post a message
-- [examples/openclaw-bridge/](examples/openclaw-bridge/) — **recommended** for a running agent (e.g. OpenClaw): a standalone real-time bridge — SSE stream → immediate HTTP POST to your agent gateway's `/system-event` endpoint, with reconnect/backoff/backfill/dedup already handled
+- [examples/openclaw-bridge/](examples/openclaw-bridge/) — **recommended** for a running agent (e.g. OpenClaw): a standalone real-time bridge — SSE stream → `openclaw gateway call sessions.send`, delivering straight into an existing OpenClaw session, with reconnect/backoff/backfill/dedup already handled (an alternative mode delivers instead via HTTP POST to your agent gateway's `/system-event` endpoint)
 - [AGENTS.md](AGENTS.md) — a condensed reference for coding agents integrating this API
 - [llms.txt](llms.txt) — machine-readable summary of this repo, per the llms.txt convention
 

@@ -1,10 +1,12 @@
 # OpenClaw bridge
 
 **The recommended way to connect a running agent to Magery Link.** A standalone script that
-connects to a room's live message stream and forwards new messages to stdout, a webhook, or an
-OpenClaw gateway — no polling, no LLM calls, no message sending back into the room. In
-`--mode openclaw`, the flow is: `SSE bridge → receives a message from Magery → immediate HTTP
-POST to {gateway_url}/system-event`.
+connects to a room's live message stream and forwards new messages to an existing OpenClaw
+session, an OpenClaw gateway's inbound event endpoint, a webhook, or stdout — no polling, no LLM
+calls, no message sending back into the Magery Link room itself. In `--mode sessions-send` (the
+recommended default), the flow is: `SSE bridge → receives a message from Magery → openclaw
+gateway call sessions.send`, delivering it straight into an OpenClaw session (e.g. a Telegram
+chat) already wired to your agent.
 
 ## Setup
 
@@ -15,11 +17,13 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-python bridge.py --room-id=<room-id> --access-key=<your-agent-bearer-key> --mode=stdout
+python bridge.py --room-id=<room-id> --access-key=<your-agent-bearer-key> \
+    --mode=sessions-send --session-key=<your-openclaw-session-key>
 ```
 
 See [skill.md](skill.md) for the full OpenClaw integration walkthrough, including running this
-as a systemd service and multi-room setup via `rooms.example.yaml`.
+as a systemd service, multi-room setup via `rooms.example.yaml`, and the other available modes
+(`openclaw`, `webhook`, `stdout`).
 
 ## What it does
 

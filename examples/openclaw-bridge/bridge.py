@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Magery Link agent bridge: forwards new room messages to stdout, a webhook, or OpenClaw's
-gateway in real time via Server-Sent Events — no polling, no LLM calls, no message sending.
+"""Magery Link agent bridge: forwards new room messages to an OpenClaw session, an OpenClaw
+gateway, a webhook, or stdout in real time via Server-Sent Events — no polling, no LLM calls,
+no message sending back into the Magery Link room itself.
 
-Usage (single room):
-    python bridge.py --room-id=<room-id> --access-key=<bearer-key> --mode=openclaw \
-        --gateway-url=http://localhost:18787
+Usage (single room, recommended default):
+    python bridge.py --room-id=<room-id> --access-key=<bearer-key> --mode=sessions-send \
+        --session-key=agent:main:telegram:default:direct:XXXXXXXX
 
 Usage (multi-room):
     python bridge.py --config=rooms.yaml --access-key=<bearer-key> --mode=stdout
@@ -15,6 +16,7 @@ import argparse
 import json
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -143,6 +145,13 @@ def format_openclaw_payload(message: dict) -> dict:
     }
 
 
+def format_sessions_send_payload(message: dict, session_key: str) -> dict:
+    return {
+        "key": session_key,
+        "message": f"📨 Magery | {message['authorName']}: {message['message']}",
+    }
+
+
 def parse_webhook_headers(raw_headers: list[str]) -> dict[str, str]:
     headers: dict[str, str] = {}
     for raw in raw_headers:
@@ -173,10 +182,24 @@ def emit_openclaw(message: dict, room_id: str, room_label: str | None,
     ).raise_for_status()
 
 
+def emit_sessions_send(message: dict, room_id: str, room_label: str | None,
+                        session_key: str, **_: Any) -> None:
+    try:
+        subprocess.run(
+            ["openclaw", "gateway", "call", "sessions.send",
+             "--params", json.dumps(format_sessions_send_payload(message, session_key)),
+             "--json", "--timeout", "5000"],
+            capture_output=True, text=True, timeout=10, check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"openclaw sessions.send failed (exit {exc.returncode}): {exc.stderr}") from exc
+
+
 OUTPUT_SINKS = {
     "stdout": emit_stdout,
     "webhook": emit_webhook,
     "openclaw": emit_openclaw,
+    "sessions-send": emit_sessions_send,
 }
 
 
@@ -365,12 +388,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", help="path to a rooms.yaml for multi-room mode; mutually exclusive with --room-id")
     parser.add_argument("--base-url", default=os.environ.get("MAGERY_BASE_URL", DEFAULT_BASE_URL),
                          help=f"e.g. {DEFAULT_BASE_URL} (env: MAGERY_BASE_URL)")
-    parser.add_argument("--mode", default="stdout", choices=["stdout", "webhook", "openclaw"])
+    parser.add_argument("--mode", default="stdout", choices=["stdout", "webhook", "openclaw", "sessions-send"])
     parser.add_argument("--webhook-url", help="required when --mode=webhook")
     parser.add_argument("--webhook-header", action="append", default=[],
                          help="repeatable, format 'Header-Name: value'")
     parser.add_argument("--gateway-url", default=os.environ.get("MAGERY_GATEWAY_URL", DEFAULT_GATEWAY_URL),
                          help=f"OpenClaw gateway base URL, e.g. {DEFAULT_GATEWAY_URL} (env: MAGERY_GATEWAY_URL)")
+    parser.add_argument("--session-key", default=os.environ.get("MAGERY_SESSION_KEY"),
+                         help="OpenClaw session key, format 'agent:main:telegram:default:direct:XXXXXXXX' "
+                              "(env: MAGERY_SESSION_KEY); required when --mode=sessions-send")
     parser.add_argument("--last-id", type=int, default=None,
                          help="resume backfill from this message id (single-room mode only)")
     args = parser.parse_args(argv)
@@ -381,6 +407,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("exactly one of --room-id or --config is required")
     if args.mode == "webhook" and not args.webhook_url:
         parser.error("--webhook-url is required when --mode=webhook")
+    if args.mode == "sessions-send" and not args.session_key:
+        parser.error("--session-key is required when --mode=sessions-send")
     return args
 
 
@@ -396,6 +424,7 @@ def main(argv: list[str] | None = None) -> int:
         "webhook_url": args.webhook_url,
         "webhook_headers": parse_webhook_headers(args.webhook_header),
         "gateway_url": args.gateway_url,
+        "session_key": args.session_key,
     }
 
     if args.room_id:
