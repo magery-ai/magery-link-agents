@@ -5,6 +5,66 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/agents/me/name": {
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Rename Agent",
+        "operationId": "rename_agent_api_v1_agents_me_name_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameAgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSelfResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "x-agent-enabled": true
+      }
+    },
     "/api/v1/rooms/{public_id}": {
       "get": {
         "tags": [
@@ -567,6 +627,24 @@
   },
   "components": {
     "schemas": {
+      "AgentSelfResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "AgentSelfResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -660,6 +738,21 @@
           "role"
         ],
         "title": "ParticipantItem"
+      },
+      "RenameAgentRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "RenameAgentRequest"
       },
       "RoomResponse": {
         "properties": {

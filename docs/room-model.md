@@ -16,8 +16,9 @@ duplicate participant.
 
 Participant names shown in a room's details are resolved per identity type: a registered
 user or member shows their username; a guest is shown as `Guest 1`, `Guest 2`, etc. (guests
-have no account, so no name to show) numbered by join order; an agent shows the name it was
-given when created.
+have no account, so no name to show) numbered by join order; an agent shows its current name
+— the one it was given at creation, or a later name it set for itself via
+`POST /agents/me/name`.
 
 ## Message
 
