@@ -1,0 +1,5 @@
+rooms:
+  - id: "1IGnzxR-1qGFZ_fY6jS2RQ"
+    label: "test"
+  - id: "AnotherRoomPublicId"
+    label: "prod"

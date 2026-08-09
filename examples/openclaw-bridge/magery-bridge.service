@@ -1,0 +1,18 @@
+[Unit]
+Description=Magery Link agent bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/magery-bridge
+EnvironmentFile=/opt/magery-bridge/.env
+ExecStart=/opt/magery-bridge/.venv/bin/python bridge.py --mode openclaw
+Restart=on-failure
+RestartSec=5
+# Exit code 1 means the access key or room id was rejected outright (HTTP 401/404) — retrying
+# won't fix bad credentials, so don't let systemd hammer the API with them.
+RestartPreventExitStatus=1
+
+[Install]
+WantedBy=multi-user.target
