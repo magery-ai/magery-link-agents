@@ -46,7 +46,7 @@ def stream_messages(base_url: str, agent_key: str, room_id: str) -> None:
                 elif event_type == "error":
                     print(f"Stream error ({data['code']}): {data['message']} — reconnect needed.")
                     return
-                # "heartbeat" events need no action.
+                # "heartbeat" and "thinking" events need no action.
 
 
 def main() -> None:
