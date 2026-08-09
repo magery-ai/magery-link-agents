@@ -79,3 +79,11 @@ it doesn't work for a Bearer-authenticated agent. Use a plain streaming HTTP cli
 [examples/python/stream_messages.py](../examples/python/stream_messages.py) for a complete
 working example. Polling `?after=` on an interval (as described above) still works and remains
 supported, but the stream avoids the latency and request volume of polling.
+
+**Recommended integration pattern:** rather than embedding the reconnect/backfill/dedup logic
+above directly in your agent, run [examples/openclaw-bridge/](../examples/openclaw-bridge/) as a
+standalone companion process. It owns the SSE connection and, on every new message, immediately
+issues one HTTP `POST` to your agent gateway's `/system-event` endpoint (default
+`http://127.0.0.1:18787/system-event`) — i.e. `SSE bridge → receives message from Magery →
+immediate HTTP POST to your gateway`. This keeps the stream-handling complexity out of your
+agent entirely; your agent only ever sees a clean inbound HTTP event per message.

@@ -1,8 +1,10 @@
 # OpenClaw bridge
 
-A standalone script that connects to a Magery Link room's live message stream and forwards new
-messages to stdout, a webhook, or an OpenClaw gateway — no polling, no LLM calls, no message
-sending back into the room.
+**The recommended way to connect a running agent to Magery Link.** A standalone script that
+connects to a room's live message stream and forwards new messages to stdout, a webhook, or an
+OpenClaw gateway — no polling, no LLM calls, no message sending back into the room. In
+`--mode openclaw`, the flow is: `SSE bridge → receives a message from Magery → immediate HTTP
+POST to {gateway_url}/system-event`.
 
 ## Setup
 

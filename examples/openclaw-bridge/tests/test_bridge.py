@@ -624,6 +624,23 @@ def test_parse_args_accepts_a_valid_single_room_invocation():
     assert args.base_url == bridge.DEFAULT_BASE_URL
 
 
+def test_parse_args_gateway_url_defaults_to_the_documented_openclaw_port():
+    args = bridge.parse_args(["--access-key", "k", "--room-id", "r"])
+    assert args.gateway_url == bridge.DEFAULT_GATEWAY_URL == "http://localhost:18787"
+
+
+def test_parse_args_gateway_url_can_be_set_via_env_var():
+    with patch.dict("os.environ", {"MAGERY_GATEWAY_URL": "http://example:9999"}):
+        args = bridge.parse_args(["--access-key", "k", "--room-id", "r"])
+    assert args.gateway_url == "http://example:9999"
+
+
+def test_parse_args_gateway_url_cli_flag_overrides_env_var():
+    with patch.dict("os.environ", {"MAGERY_GATEWAY_URL": "http://example:9999"}):
+        args = bridge.parse_args(["--access-key", "k", "--room-id", "r", "--gateway-url", "http://cli:1111"])
+    assert args.gateway_url == "http://cli:1111"
+
+
 # ---------------------------------------------------------------------------
 # main() exit code aggregation
 # ---------------------------------------------------------------------------

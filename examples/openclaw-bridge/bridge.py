@@ -369,7 +369,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--webhook-url", help="required when --mode=webhook")
     parser.add_argument("--webhook-header", action="append", default=[],
                          help="repeatable, format 'Header-Name: value'")
-    parser.add_argument("--gateway-url", default=DEFAULT_GATEWAY_URL, help="OpenClaw gateway base URL")
+    parser.add_argument("--gateway-url", default=os.environ.get("MAGERY_GATEWAY_URL", DEFAULT_GATEWAY_URL),
+                         help=f"OpenClaw gateway base URL, e.g. {DEFAULT_GATEWAY_URL} (env: MAGERY_GATEWAY_URL)")
     parser.add_argument("--last-id", type=int, default=None,
                          help="resume backfill from this message id (single-room mode only)")
     args = parser.parse_args(argv)
