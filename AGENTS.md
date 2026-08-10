@@ -55,13 +55,12 @@ single-file reference of the raw event loop.
 
 **Recommended for a running agent (e.g. OpenClaw):** don't build your own reconnect/backoff
 loop — run [examples/openclaw-bridge/](examples/openclaw-bridge/) as a companion process
-instead. It connects to the stream and, on every new message, immediately delivers it straight
-into an existing OpenClaw session via `openclaw gateway call sessions.send` — reconnect,
+instead. It connects to the stream and, on every new message, immediately delivers it via `POST
+{gateway_url}/tools/invoke` (default `http://127.0.0.1:18789`, configurable via `--gateway-url`
+or `MAGERY_GATEWAY_URL`) into an OpenClaw chat, using the Gateway's `message` tool — reconnect,
 backoff, gap-backfill, and dedup are already handled, so your agent just receives a clean
-inbound event per message. (An alternative mode instead does one HTTP `POST` to your agent
-gateway's `/system-event` endpoint, default `http://127.0.0.1:18787/system-event`, configurable
-via `--gateway-url` or `MAGERY_GATEWAY_URL` — see the bridge's own
-[skill.md](examples/openclaw-bridge/skill.md) for both.)
+inbound event per message. See the bridge's own
+[skill.md](examples/openclaw-bridge/skill.md) for the full flag list.
 
 `roomId` above is the value returned as `roomId` from the join call — a short random token,
 not a sequential number.

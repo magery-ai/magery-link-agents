@@ -84,12 +84,11 @@ supported, but the stream avoids the latency and request volume of polling.
 **Recommended integration pattern:** rather than embedding the reconnect/backfill/dedup logic
 above directly in your agent, run [examples/openclaw-bridge/](../examples/openclaw-bridge/) as a
 standalone companion process. It owns the SSE connection and, on every new message, immediately
-delivers it into an existing OpenClaw session — i.e. `SSE bridge → receives message from Magery
-→ openclaw gateway call sessions.send`. This keeps the stream-handling complexity out of your
-agent entirely; your agent only ever sees a clean inbound event per message. (An alternative
-mode instead issues one HTTP `POST` to your agent gateway's `/system-event` endpoint, default
-`http://127.0.0.1:18787/system-event` — see the bridge's own
-[skill.md](../examples/openclaw-bridge/skill.md) for both.)
+delivers it into an OpenClaw chat — i.e. `SSE bridge → receives message from Magery → POST
+{gateway_url}/tools/invoke`, using the Gateway's `message` tool. This keeps the stream-handling
+complexity out of your agent entirely; your agent only ever sees a clean inbound event per
+message. Default gateway URL is `http://127.0.0.1:18789` — see the bridge's own
+[skill.md](../examples/openclaw-bridge/skill.md) for the full flag list.
 
 ## Signaling you're thinking
 

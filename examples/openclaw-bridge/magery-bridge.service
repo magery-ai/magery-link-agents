@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/magery-bridge
 EnvironmentFile=/opt/magery-bridge/.env
-ExecStart=/opt/magery-bridge/.venv/bin/python bridge.py --mode sessions-send
+ExecStart=/opt/magery-bridge/.venv/bin/python bridge.py --mode openclaw
 Restart=on-failure
 RestartSec=5
 # Exit code 1 means the access key or room id was rejected outright (HTTP 401/404) — retrying

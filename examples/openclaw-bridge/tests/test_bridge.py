@@ -1,5 +1,4 @@
 import json
-import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -121,18 +120,10 @@ def test_format_stdout_maps_wire_fields_to_output_fields():
 
 def test_format_openclaw_payload_matches_the_confirmed_shape():
     message = {"authorName": "alice", "message": "hello"}
-    assert bridge.format_openclaw_payload(message) == {
-        "text": "[Magery] alice: hello", "source": "magery-link",
-    }
-
-
-def test_format_sessions_send_payload_matches_the_specified_shape():
-    message = {"authorName": "alice", "message": "hello"}
-    assert bridge.format_sessions_send_payload(
-        message, "agent:main:telegram:default:direct:XXXXXXXX",
-    ) == {
-        "key": "agent:main:telegram:default:direct:XXXXXXXX",
-        "message": "📨 Magery | alice: hello",
+    assert bridge.format_openclaw_payload(message, "123456789") == {
+        "tool": "message",
+        "action": "send",
+        "args": {"target": "123456789", "message": "📨 Magery | alice: hello"},
     }
 
 
@@ -153,6 +144,7 @@ def _mock_json_response(status_code: int, body: dict) -> MagicMock:
     resp = MagicMock()
     resp.status_code = status_code
     resp.json.return_value = body
+    resp.text = str(body)
     if status_code >= 400:
         resp.raise_for_status.side_effect = requests.HTTPError(response=resp)
     else:
@@ -456,37 +448,45 @@ def test_emit_webhook_posts_the_formatted_body_with_custom_headers():
     }
 
 
-def test_emit_sessions_send_calls_the_openclaw_cli_with_the_formatted_payload():
+def test_emit_openclaw_posts_to_tools_invoke_with_bearer_auth_and_the_formatted_payload():
     message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
-    with patch("bridge.subprocess.run") as mock_run:
-        bridge.emit_sessions_send(
+    with patch("bridge.requests.post", return_value=_mock_json_response(200, {"ok": True})) as mock_post:
+        bridge.emit_openclaw(
             message, room_id="room-1", room_label="test",
-            session_key="agent:main:telegram:default:direct:XXXXXXXX",
+            gateway_url="http://localhost:18789", gateway_token="secret-token", target="123456789",
         )
-    mock_run.assert_called_once()
-    assert mock_run.call_args.args[0] == [
-        "openclaw", "gateway", "call", "sessions.send",
-        "--params", json.dumps({
-            "key": "agent:main:telegram:default:direct:XXXXXXXX",
-            "message": "📨 Magery | alice: hi",
-        }),
-        "--json", "--timeout", "5000",
-    ]
-    assert mock_run.call_args.kwargs == {
-        "capture_output": True, "text": True, "timeout": 10, "check": True,
+    mock_post.assert_called_once()
+    assert mock_post.call_args.args[0] == "http://localhost:18789/tools/invoke"
+    assert mock_post.call_args.kwargs["headers"] == {"Authorization": "Bearer secret-token"}
+    assert mock_post.call_args.kwargs["json"] == {
+        "tool": "message", "action": "send",
+        "args": {"target": "123456789", "message": "📨 Magery | alice: hi"},
     }
 
 
-def test_emit_sessions_send_surfaces_stderr_on_a_failed_openclaw_call():
+def test_emit_openclaw_raises_with_the_response_body_on_a_failed_call():
     message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
-    error = subprocess.CalledProcessError(
-        returncode=1, cmd=["openclaw"], stderr="gateway auth error: invalid token",
-    )
-    with patch("bridge.subprocess.run", side_effect=error):
-        with pytest.raises(RuntimeError, match="gateway auth error: invalid token"):
-            bridge.emit_sessions_send(
+    resp = MagicMock()
+    resp.status_code = 401
+    resp.text = '{"ok": false, "error": "invalid token"}'
+    resp.raise_for_status.side_effect = requests.HTTPError("401 Client Error", response=resp)
+    with patch("bridge.requests.post", return_value=resp):
+        with pytest.raises(requests.HTTPError, match="invalid token"):
+            bridge.emit_openclaw(
                 message, room_id="room-1", room_label="test",
-                session_key="agent:main:telegram:default:direct:XXXXXXXX",
+                gateway_url="http://localhost:18789", gateway_token="secret-token", target="123456789",
+            )
+
+
+def test_emit_openclaw_raises_when_the_gateway_returns_ok_false_in_a_200_response():
+    message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
+    with patch("bridge.requests.post", return_value=_mock_json_response(
+        200, {"ok": False, "error": "channel not connected"},
+    )):
+        with pytest.raises(requests.HTTPError, match="channel not connected"):
+            bridge.emit_openclaw(
+                message, room_id="room-1", room_label="test",
+                gateway_url="http://localhost:18789", gateway_token="secret-token", target="123456789",
             )
 
 
@@ -661,9 +661,17 @@ def test_parse_args_requires_webhook_url_for_webhook_mode():
         bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "webhook"])
 
 
-def test_parse_args_requires_session_key_for_sessions_send_mode():
+def test_parse_args_requires_gateway_token_and_target_for_openclaw_mode():
     with pytest.raises(SystemExit):
-        bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "sessions-send"])
+        bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "openclaw"])
+    with pytest.raises(SystemExit):
+        bridge.parse_args([
+            "--access-key", "k", "--room-id", "r", "--mode", "openclaw", "--gateway-token", "t",
+        ])
+    with pytest.raises(SystemExit):
+        bridge.parse_args([
+            "--access-key", "k", "--room-id", "r", "--mode", "openclaw", "--target", "123",
+        ])
 
 
 def test_parse_args_accepts_a_valid_single_room_invocation():
@@ -676,7 +684,7 @@ def test_parse_args_accepts_a_valid_single_room_invocation():
 
 def test_parse_args_gateway_url_defaults_to_the_documented_openclaw_port():
     args = bridge.parse_args(["--access-key", "k", "--room-id", "r"])
-    assert args.gateway_url == bridge.DEFAULT_GATEWAY_URL == "http://localhost:18787"
+    assert args.gateway_url == bridge.DEFAULT_GATEWAY_URL == "http://localhost:18789"
 
 
 def test_parse_args_gateway_url_can_be_set_via_env_var():
@@ -691,28 +699,35 @@ def test_parse_args_gateway_url_cli_flag_overrides_env_var():
     assert args.gateway_url == "http://cli:1111"
 
 
-def test_parse_args_accepts_sessions_send_mode_with_a_session_key():
+def test_parse_args_accepts_openclaw_mode_with_gateway_token_and_target():
     args = bridge.parse_args([
-        "--access-key", "k", "--room-id", "r", "--mode", "sessions-send",
-        "--session-key", "agent:main:telegram:default:direct:XXXXXXXX",
+        "--access-key", "k", "--room-id", "r", "--mode", "openclaw",
+        "--gateway-token", "secret-token", "--target", "123456789",
     ])
-    assert args.mode == "sessions-send"
-    assert args.session_key == "agent:main:telegram:default:direct:XXXXXXXX"
+    assert args.mode == "openclaw"
+    assert args.gateway_token == "secret-token"
+    assert args.target == "123456789"
 
 
-def test_parse_args_session_key_can_be_set_via_env_var():
-    with patch.dict("os.environ", {"MAGERY_SESSION_KEY": "agent:main:telegram:default:direct:YYYYYYYY"}):
-        args = bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "sessions-send"])
-    assert args.session_key == "agent:main:telegram:default:direct:YYYYYYYY"
+def test_parse_args_gateway_token_and_target_can_be_set_via_env_vars():
+    with patch.dict("os.environ", {
+        "OPENCLAW_GATEWAY_TOKEN": "env-token", "MAGERY_TARGET": "env-target",
+    }):
+        args = bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "openclaw"])
+    assert args.gateway_token == "env-token"
+    assert args.target == "env-target"
 
 
-def test_parse_args_session_key_cli_flag_overrides_env_var():
-    with patch.dict("os.environ", {"MAGERY_SESSION_KEY": "agent:main:telegram:default:direct:YYYYYYYY"}):
+def test_parse_args_gateway_token_and_target_cli_flags_override_env_vars():
+    with patch.dict("os.environ", {
+        "OPENCLAW_GATEWAY_TOKEN": "env-token", "MAGERY_TARGET": "env-target",
+    }):
         args = bridge.parse_args([
-            "--access-key", "k", "--room-id", "r", "--mode", "sessions-send",
-            "--session-key", "agent:main:telegram:default:direct:ZZZZZZZZ",
+            "--access-key", "k", "--room-id", "r", "--mode", "openclaw",
+            "--gateway-token", "cli-token", "--target", "cli-target",
         ])
-    assert args.session_key == "agent:main:telegram:default:direct:ZZZZZZZZ"
+    assert args.gateway_token == "cli-token"
+    assert args.target == "cli-target"
 
 
 # ---------------------------------------------------------------------------
