@@ -127,6 +127,19 @@ def test_format_openclaw_payload_matches_the_confirmed_shape():
     }
 
 
+def test_format_sessions_send_payload_matches_the_stated_shape():
+    message = {"authorName": "alice", "message": "hello"}
+    assert bridge.format_sessions_send_payload(
+        message, "agent:main:telegram:default:direct:68066288",
+    ) == {
+        "tool": "sessions_send",
+        "args": {
+            "sessionKey": "agent:main:telegram:default:direct:68066288",
+            "message": "📨 Magery | alice: hello",
+        },
+    }
+
+
 def test_parse_webhook_headers_splits_on_first_colon_space():
     headers = bridge.parse_webhook_headers(["X-Api-Key: secret", "Authorization: Bearer abc"])
     assert headers == {"X-Api-Key": "secret", "Authorization": "Bearer abc"}
@@ -490,6 +503,54 @@ def test_emit_openclaw_raises_when_the_gateway_returns_ok_false_in_a_200_respons
             )
 
 
+def test_emit_sessions_send_posts_to_tools_invoke_with_bearer_auth_and_the_formatted_payload():
+    message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
+    with patch("bridge.requests.post", return_value=_mock_json_response(200, {"ok": True})) as mock_post:
+        bridge.emit_sessions_send(
+            message, room_id="room-1", room_label="test",
+            gateway_url="http://localhost:18789", gateway_token="secret-token",
+            session_key="agent:main:telegram:default:direct:68066288",
+        )
+    mock_post.assert_called_once()
+    assert mock_post.call_args.args[0] == "http://localhost:18789/tools/invoke"
+    assert mock_post.call_args.kwargs["headers"] == {"Authorization": "Bearer secret-token"}
+    assert mock_post.call_args.kwargs["json"] == {
+        "tool": "sessions_send",
+        "args": {
+            "sessionKey": "agent:main:telegram:default:direct:68066288",
+            "message": "📨 Magery | alice: hi",
+        },
+    }
+
+
+def test_emit_sessions_send_raises_with_the_response_body_on_a_failed_call():
+    message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
+    resp = MagicMock()
+    resp.status_code = 401
+    resp.text = '{"ok": false, "error": "invalid token"}'
+    resp.raise_for_status.side_effect = requests.HTTPError("401 Client Error", response=resp)
+    with patch("bridge.requests.post", return_value=resp):
+        with pytest.raises(requests.HTTPError, match="invalid token"):
+            bridge.emit_sessions_send(
+                message, room_id="room-1", room_label="test",
+                gateway_url="http://localhost:18789", gateway_token="secret-token",
+                session_key="agent:main:telegram:default:direct:68066288",
+            )
+
+
+def test_emit_sessions_send_raises_when_the_gateway_returns_ok_false_in_a_200_response():
+    message = {"id": 1, "authorName": "alice", "message": "hi", "createdAt": "t1", "isOwn": False}
+    with patch("bridge.requests.post", return_value=_mock_json_response(
+        200, {"ok": False, "error": "session not found"},
+    )):
+        with pytest.raises(requests.HTTPError, match="session not found"):
+            bridge.emit_sessions_send(
+                message, room_id="room-1", room_label="test",
+                gateway_url="http://localhost:18789", gateway_token="secret-token",
+                session_key="agent:main:telegram:default:direct:68066288",
+            )
+
+
 # ---------------------------------------------------------------------------
 # run_room()
 # ---------------------------------------------------------------------------
@@ -674,6 +735,20 @@ def test_parse_args_requires_gateway_token_and_target_for_openclaw_mode():
         ])
 
 
+def test_parse_args_requires_gateway_token_and_session_key_for_sessions_send_mode():
+    with pytest.raises(SystemExit):
+        bridge.parse_args(["--access-key", "k", "--room-id", "r", "--mode", "sessions-send"])
+    with pytest.raises(SystemExit):
+        bridge.parse_args([
+            "--access-key", "k", "--room-id", "r", "--mode", "sessions-send", "--gateway-token", "t",
+        ])
+    with pytest.raises(SystemExit):
+        bridge.parse_args([
+            "--access-key", "k", "--room-id", "r", "--mode", "sessions-send",
+            "--session-key", "agent:main:telegram:default:direct:68066288",
+        ])
+
+
 def test_parse_args_accepts_a_valid_single_room_invocation():
     args = bridge.parse_args(["--access-key", "k", "--room-id", "r"])
     assert args.access_key == "k"
@@ -728,6 +803,33 @@ def test_parse_args_gateway_token_and_target_cli_flags_override_env_vars():
         ])
     assert args.gateway_token == "cli-token"
     assert args.target == "cli-target"
+
+
+def test_parse_args_accepts_sessions_send_mode_with_gateway_token_and_session_key():
+    args = bridge.parse_args([
+        "--access-key", "k", "--room-id", "r", "--mode", "sessions-send",
+        "--gateway-token", "secret-token", "--session-key", "agent:main:telegram:default:direct:68066288",
+    ])
+    assert args.mode == "sessions-send"
+    assert args.gateway_token == "secret-token"
+    assert args.session_key == "agent:main:telegram:default:direct:68066288"
+
+
+def test_parse_args_session_key_can_be_set_via_env_var():
+    with patch.dict("os.environ", {"MAGERY_SESSION_KEY": "agent:main:telegram:default:direct:11111111"}):
+        args = bridge.parse_args([
+            "--access-key", "k", "--room-id", "r", "--mode", "sessions-send", "--gateway-token", "t",
+        ])
+    assert args.session_key == "agent:main:telegram:default:direct:11111111"
+
+
+def test_parse_args_session_key_cli_flag_overrides_env_var():
+    with patch.dict("os.environ", {"MAGERY_SESSION_KEY": "agent:main:telegram:default:direct:11111111"}):
+        args = bridge.parse_args([
+            "--access-key", "k", "--room-id", "r", "--mode", "sessions-send", "--gateway-token", "t",
+            "--session-key", "agent:main:telegram:default:direct:22222222",
+        ])
+    assert args.session_key == "agent:main:telegram:default:direct:22222222"
 
 
 # ---------------------------------------------------------------------------

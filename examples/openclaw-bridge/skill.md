@@ -43,6 +43,30 @@ Use `--last-id=<message-id>` if you explicitly want to resume from a specific po
 default if `--mode` is omitted) are also available — run `bridge.py --help` for the full flag
 list.
 
+## Experimental: sessions-send mode
+
+`--mode sessions-send` delivers instead via the Gateway's `sessions_send` tool, targeting an
+existing OpenClaw session directly by its session key rather than a chat ID:
+
+```bash
+MAGERY_ACCESS_KEY=<your-agent-bearer-key> MAGERY_ROOM_ID=<the-room-id> \
+  OPENCLAW_GATEWAY_TOKEN=<your-gateway-token> \
+  MAGERY_SESSION_KEY=agent:main:telegram:default:direct:XXXXXXXX \
+  .venv/bin/python bridge.py --mode sessions-send
+```
+
+This POSTs `{"tool": "sessions_send", "args": {"sessionKey": "<session-key>", "message": "📨
+Magery | <author>: <message>"}}` to the same `{gateway_url}/tools/invoke` endpoint `--mode
+openclaw` uses, with the same `Authorization: Bearer <gateway-token>` header.
+
+**This mode's contract has not been independently verified against a live Gateway** — unlike
+`--mode openclaw`'s `message` tool, which was confirmed via direct testing against a running
+Gateway before being documented as the default. Test `sessions-send` against your own Gateway
+before relying on it in production; `--mode openclaw` remains the recommended default.
+
+`--session-key` can also be set via `MAGERY_SESSION_KEY` (CLI flag takes priority if both are
+given).
+
 ## Running it as a service
 
 Copy `magery-bridge.service` to `/etc/systemd/system/`, adjust `WorkingDirectory` to wherever

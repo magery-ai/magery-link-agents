@@ -22,7 +22,7 @@ python bridge.py --room-id=<room-id> --access-key=<your-agent-bearer-key> \
 
 See [skill.md](skill.md) for the full OpenClaw integration walkthrough, including running this
 as a systemd service, multi-room setup via `rooms.example.yaml`, and the other available modes
-(`webhook`, `stdout`).
+(`webhook`, `stdout`, and the experimental `sessions-send`).
 
 ## What it does
 

@@ -148,6 +148,16 @@ def format_openclaw_payload(message: dict, target: str) -> dict:
     }
 
 
+def format_sessions_send_payload(message: dict, session_key: str) -> dict:
+    return {
+        "tool": "sessions_send",
+        "args": {
+            "sessionKey": session_key,
+            "message": f"📨 Magery | {message['authorName']}: {message['message']}",
+        },
+    }
+
+
 def parse_webhook_headers(raw_headers: list[str]) -> dict[str, str]:
     headers: dict[str, str] = {}
     for raw in raw_headers:
@@ -191,10 +201,33 @@ def emit_openclaw(message: dict, room_id: str, room_label: str | None,
         raise requests.HTTPError(f"gateway rejected the invoke: {resp.text}", response=resp)
 
 
+def emit_sessions_send(message: dict, room_id: str, room_label: str | None,
+                        gateway_url: str, gateway_token: str, session_key: str, **_: Any) -> None:
+    """EXPERIMENTAL: the sessions_send Gateway tool's contract is NOT verified against a live
+    Gateway (unlike emit_openclaw's message tool). See skill.md."""
+    resp = requests.post(
+        f"{gateway_url}/tools/invoke",
+        json=format_sessions_send_payload(message, session_key),
+        headers={"Authorization": f"Bearer {gateway_token}"},
+        timeout=10,
+    )
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(f"{exc} — response body: {resp.text}", response=resp) from exc
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict) and body.get("ok") is False:
+        raise requests.HTTPError(f"gateway rejected the invoke: {resp.text}", response=resp)
+
+
 OUTPUT_SINKS = {
     "stdout": emit_stdout,
     "webhook": emit_webhook,
     "openclaw": emit_openclaw,
+    "sessions-send": emit_sessions_send,
 }
 
 
@@ -383,7 +416,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", help="path to a rooms.yaml for multi-room mode; mutually exclusive with --room-id")
     parser.add_argument("--base-url", default=os.environ.get("MAGERY_BASE_URL", DEFAULT_BASE_URL),
                          help=f"e.g. {DEFAULT_BASE_URL} (env: MAGERY_BASE_URL)")
-    parser.add_argument("--mode", default="stdout", choices=["stdout", "webhook", "openclaw"])
+    parser.add_argument("--mode", default="stdout", choices=["stdout", "webhook", "openclaw", "sessions-send"],
+                         help="stdout | webhook | openclaw (recommended) | sessions-send (EXPERIMENTAL, unverified)")
     parser.add_argument("--webhook-url", help="required when --mode=webhook")
     parser.add_argument("--webhook-header", action="append", default=[],
                          help="repeatable, format 'Header-Name: value'")
@@ -391,10 +425,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                          help=f"OpenClaw gateway base URL, e.g. {DEFAULT_GATEWAY_URL} (env: MAGERY_GATEWAY_URL)")
     parser.add_argument("--gateway-token", default=os.environ.get("OPENCLAW_GATEWAY_TOKEN"),
                          help="OpenClaw Gateway auth token (env: OPENCLAW_GATEWAY_TOKEN); "
-                              "required when --mode=openclaw")
+                              "required when --mode=openclaw or --mode=sessions-send")
     parser.add_argument("--target", default=os.environ.get("MAGERY_TARGET"),
                          help="OpenClaw chat id to deliver into, e.g. a Telegram chat id "
                               "(env: MAGERY_TARGET); required when --mode=openclaw")
+    parser.add_argument("--session-key", default=os.environ.get("MAGERY_SESSION_KEY"),
+                         help="OpenClaw session key, format 'agent:main:telegram:default:direct:XXXXXXXX' "
+                              "(env: MAGERY_SESSION_KEY); required when --mode=sessions-send. "
+                              "EXPERIMENTAL/unverified — see skill.md.")
     parser.add_argument("--last-id", type=int, default=None,
                          help="resume backfill from this message id (single-room mode only)")
     args = parser.parse_args(argv)
@@ -407,6 +445,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--webhook-url is required when --mode=webhook")
     if args.mode == "openclaw" and not (args.gateway_token and args.target):
         parser.error("--gateway-token and --target are both required when --mode=openclaw")
+    if args.mode == "sessions-send" and not (args.gateway_token and args.session_key):
+        parser.error("--gateway-token and --session-key are both required when --mode=sessions-send")
     return args
 
 
@@ -424,6 +464,7 @@ def main(argv: list[str] | None = None) -> int:
         "gateway_url": args.gateway_url,
         "gateway_token": args.gateway_token,
         "target": args.target,
+        "session_key": args.session_key,
     }
 
     if args.room_id:
