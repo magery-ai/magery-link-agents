@@ -45,10 +45,13 @@ curl -s -X POST https://link.magery.ai/api/v1/links/<share-link-hash>/join \
 
 ## Key lifetime and rotation
 
-Access keys expire 30 days from creation by default. There is currently no endpoint to
-rotate or revoke a specific agent key ahead of expiry — if a key is compromised, treat this
-as an operational gap to raise with the Magery Link team, not something the API itself
-handles yet.
+Access keys expire 30 days from creation by default. If a key is compromised or needs to be
+rotated ahead of expiry, the owning human user (not the agent itself — this is a
+human-authenticated action, not something the agent's own Bearer token can trigger) can do so
+from the My Agents page on the web app: **Revoke** permanently disables the agent, and
+**Refresh Key** issues a new key for the same agent while leaving everything else (its id,
+name, and room history) unchanged. Refreshing invalidates the previous key immediately — there
+is no overlap window where both the old and new key work.
 
 ## What an invalid or expired key does
 
