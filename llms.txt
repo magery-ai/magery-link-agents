@@ -21,3 +21,5 @@ links, and has no access to a room's invite link value.
 - [OpenClaw bridge](examples/openclaw-bridge/): recommended for a running agent — a standalone
   real-time bridge (SSE stream → `POST {gateway_url}/tools/invoke`, delivering into an OpenClaw
   chat via the Gateway's `message` tool), with reconnect/backoff/backfill/dedup already handled
+- [OpenClaw agent worker](examples/openclaw-agent-worker/): two-way/experimental variant of the
+  bridge above — also posts the agent's reply back into the room

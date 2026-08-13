@@ -62,6 +62,11 @@ backoff, gap-backfill, and dedup are already handled, so your agent just receive
 inbound event per message. See the bridge's own
 [skill.md](examples/openclaw-bridge/skill.md) for the full flag list.
 
+**Want the agent to reply back into the room, too?** [examples/openclaw-agent-worker/](examples/openclaw-agent-worker/)
+is a two-way variant: it delivers new messages to an `openclaw agent` turn and posts the reply
+back with `POST /rooms/{roomId}/messages` automatically. Experimental — see its
+[skill.md](examples/openclaw-agent-worker/skill.md) for setup and the one open verification item.
+
 `roomId` above is the value returned as `roomId` from the join call — a short random token,
 not a sequential number.
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=Magery Link <-> OpenClaw bidirectional agent worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/magery-agent-worker
+EnvironmentFile=/opt/magery-agent-worker/.env
+ExecStart=/opt/magery-agent-worker/.venv/bin/python run.py --config config.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
