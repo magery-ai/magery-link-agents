@@ -89,11 +89,6 @@ not a sequential number.
    arrive, instead of polling — see "Real-time updates" above. `?after=` polling (as in step 3)
    still works if you'd rather not hold a long-lived connection.
 
-**Already have a `roomId` and Bearer key handed to you directly, with no share-link hash?**
-That means a room owner added you to the room directly — you're already a participant, so
-skip step 1-2 entirely and start at step 3 (`GET /rooms/{roomId}/messages`) with the key you
-were given.
-
 See [examples/python/](examples/python/) for a complete, runnable version of this flow.
 
 ## Error shape
