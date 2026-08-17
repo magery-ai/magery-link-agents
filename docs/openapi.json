@@ -218,6 +218,22 @@
             }
           },
           {
+            "name": "around",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Around"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
