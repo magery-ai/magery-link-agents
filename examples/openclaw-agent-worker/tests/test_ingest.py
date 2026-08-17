@@ -87,6 +87,48 @@ def test_make_record_maps_wire_fields_to_the_buffer_record_schema():
     }
 
 
+def test_should_process_returns_true_when_mention_names_is_empty():
+    assert ingest.should_process("anything at all", []) is True
+
+
+def test_should_process_matches_a_configured_name_case_insensitively():
+    assert ingest.should_process("hey @Father can you help", ["father"]) is True
+    assert ingest.should_process("hey @FATHER can you help", ["father"]) is True
+
+
+def test_should_process_matches_at_the_very_start_of_the_text():
+    assert ingest.should_process("@Father are you there", ["Father"]) is True
+
+
+def test_should_process_matches_before_trailing_punctuation():
+    assert ingest.should_process("thanks @Father!", ["Father"]) is True
+
+
+def test_should_process_does_not_match_as_a_prefix_of_a_longer_handle():
+    assert ingest.should_process("@father_john can you help", ["father"]) is False
+    assert ingest.should_process("@fatherX can you help", ["father"]) is False
+
+
+def test_should_process_does_not_match_without_a_leading_boundary():
+    assert ingest.should_process("email@father.com", ["father"]) is False
+
+
+def test_should_process_returns_false_when_no_configured_name_is_mentioned():
+    assert ingest.should_process("just a regular message", ["father"]) is False
+
+
+def test_should_process_matches_even_when_followed_by_a_non_ascii_letter():
+    assert ingest.should_process("hey @Fatheré", ["Father"]) is True
+
+
+def test_should_process_matches_even_when_followed_by_cjk_characters():
+    assert ingest.should_process("hey @Father日本語", ["Father"]) is True
+
+
+def test_should_process_matches_when_preceded_by_a_unicode_whitespace_character():
+    assert ingest.should_process("hi\xa0@Father", ["Father"]) is True
+
+
 # ---------------------------------------------------------------------------
 # backfill()
 # ---------------------------------------------------------------------------
@@ -168,7 +210,7 @@ def test_connect_and_stream_raises_auth_error_on_401(tmp_path):
     with patch("ingest.requests.get", return_value=_mock_stream_response(401, [])):
         with pytest.raises(ingest.AuthError) as exc_info:
             ingest.connect_and_stream(
-                "https://x/api/v1", "bad-key", "room-1", None, "main", buffer_path, lock,
+                "https://x/api/v1", "bad-key", "room-1", None, "main", [], buffer_path, lock,
                 queue.Queue(), ingest.Deduper(), _no_shutdown(),
             )
     assert exc_info.value.status_code == 401
@@ -188,7 +230,7 @@ def test_connect_and_stream_emits_new_messages_and_skips_own_and_duplicates(tmp_
     wake = queue.Queue()
     with patch("ingest.requests.get", return_value=_mock_stream_response(200, lines)):
         ingest.connect_and_stream(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock, wake,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock, wake,
             ingest.Deduper(), _no_shutdown(),
         )
     records = buffer.load_all(buffer_path, lock)
@@ -202,7 +244,7 @@ def test_connect_and_stream_returns_expired_on_room_expired_event(tmp_path):
     lock = buffer.FileLock(buffer_path)
     with patch("ingest.requests.get", return_value=_mock_stream_response(200, lines)):
         outcome, duration = ingest.connect_and_stream(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), ingest.Deduper(), _no_shutdown(),
         )
     assert outcome == "expired"
@@ -215,7 +257,7 @@ def test_connect_and_stream_returns_dropped_on_overflow_error_event(tmp_path):
     lock = buffer.FileLock(buffer_path)
     with patch("ingest.requests.get", return_value=_mock_stream_response(200, lines)):
         outcome, duration = ingest.connect_and_stream(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), ingest.Deduper(), _no_shutdown(),
         )
     assert outcome == "dropped"
@@ -232,7 +274,7 @@ def test_connect_and_stream_backfills_before_resuming_the_stream(tmp_path):
     with patch("ingest.requests.get") as mock_get:
         mock_get.side_effect = [_mock_json_response(200, backfill_body), _mock_stream_response(200, [])]
         ingest.connect_and_stream(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), dedup, _no_shutdown(),
         )
     records = buffer.load_all(buffer_path, lock)
@@ -258,7 +300,7 @@ def test_connect_and_stream_returns_dropped_when_the_stream_raises_mid_iteration
     lock = buffer.FileLock(buffer_path)
     with patch("ingest.requests.get", return_value=resp):
         outcome, duration = ingest.connect_and_stream(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), ingest.Deduper(), _no_shutdown(),
         )
     assert outcome == "dropped"
@@ -276,7 +318,7 @@ def test_run_ingest_returns_immediately_on_auth_error(tmp_path):
     exit_codes: dict[str, int] = {}
     with patch("ingest.connect_and_stream", side_effect=ingest.AuthError(401)) as mock_connect:
         ingest.run_ingest(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), shutdown, exit_codes,
         )
     mock_connect.assert_called_once()
@@ -298,7 +340,7 @@ def test_run_ingest_retries_on_dropped_then_returns_on_expired_and_resets_backof
     exit_codes: dict[str, int] = {}
     with patch("ingest.connect_and_stream", side_effect=fake_connect):
         ingest.run_ingest(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), shutdown, exit_codes,
         )
     assert call_count["n"] == 2
@@ -321,7 +363,7 @@ def test_run_ingest_does_not_reset_backoff_after_a_connection_that_barely_stayed
     exit_codes: dict[str, int] = {}
     with patch("ingest.connect_and_stream", side_effect=fake_connect):
         ingest.run_ingest(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), shutdown, exit_codes,
         )
     assert call_count["n"] == 2
@@ -337,7 +379,7 @@ def test_run_ingest_stops_immediately_when_shutdown_already_set(tmp_path):
     exit_codes: dict[str, int] = {}
     with patch("ingest.connect_and_stream") as mock_connect:
         ingest.run_ingest(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), shutdown, exit_codes,
         )
     mock_connect.assert_not_called()
@@ -356,9 +398,49 @@ def test_run_ingest_handles_an_unexpected_exception_without_crashing(tmp_path):
     exit_codes: dict[str, int] = {}
     with patch("ingest.connect_and_stream", side_effect=KeyError("isOwn")):
         ingest.run_ingest(
-            "https://x/api/v1", "key", "room-1", None, "main", buffer_path, lock,
+            "https://x/api/v1", "key", "room-1", None, "main", [], buffer_path, lock,
             queue.Queue(), shutdown, exit_codes,
         )
     # Returning without raising is part of the assertion; shutdown arrived mid-backoff, so the
     # room's outcome is coded 2 (a retry was in flight and got interrupted), not a clean 0.
     assert exit_codes == {"room-1": 2}
+
+
+def test_connect_and_stream_skips_a_non_matching_sse_message_but_still_marks_it_seen(tmp_path):
+    lines = [
+        'event: message',
+        'data: {"id": 1, "authorName": "alice", "message": "hi everyone", "createdAt": "t1", "isOwn": false}', '',
+        'event: message',
+        'data: {"id": 2, "authorName": "alice", "message": "hi @Father", "createdAt": "t2", "isOwn": false}', '',
+    ]
+    buffer_path = str(tmp_path / "buffer.jsonl")
+    lock = buffer.FileLock(buffer_path)
+    wake = queue.Queue()
+    dedup = ingest.Deduper()
+    with patch("ingest.requests.get", return_value=_mock_stream_response(200, lines)):
+        ingest.connect_and_stream(
+            "https://x/api/v1", "key", "room-1", None, "main", ["Father"], buffer_path, lock, wake,
+            dedup, _no_shutdown(),
+        )
+    records = buffer.load_all(buffer_path, lock)
+    assert [r["id"] for r in records] == [2]
+    assert dedup.last_id == 2
+
+
+def test_connect_and_stream_skips_a_non_matching_backfilled_message_but_still_marks_it_seen(tmp_path):
+    dedup = ingest.Deduper(last_id=0)
+    backfill_body = {"messages": [
+        {"id": 1, "authorName": "alice", "message": "missed, no mention", "createdAt": "t1", "isOwn": False},
+        {"id": 2, "authorName": "alice", "message": "missed, @Father are you there", "createdAt": "t2", "isOwn": False},
+    ]}
+    buffer_path = str(tmp_path / "buffer.jsonl")
+    lock = buffer.FileLock(buffer_path)
+    with patch("ingest.requests.get") as mock_get:
+        mock_get.side_effect = [_mock_json_response(200, backfill_body), _mock_stream_response(200, [])]
+        ingest.connect_and_stream(
+            "https://x/api/v1", "key", "room-1", None, "main", ["Father"], buffer_path, lock,
+            queue.Queue(), dedup, _no_shutdown(),
+        )
+    records = buffer.load_all(buffer_path, lock)
+    assert [r["id"] for r in records] == [2]
+    assert dedup.last_id == 2

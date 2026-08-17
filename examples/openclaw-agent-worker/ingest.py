@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import sys
 import threading
 import time
@@ -97,6 +98,24 @@ def make_record(message: dict, room_id: str, agent: str) -> dict:
     }
 
 
+def should_process(text: str, mention_names: list[str]) -> bool:
+    """True if `text` should be processed: strict mention-filter mode is disabled
+    (mention_names is empty), or text contains an @-mention of one of the configured names as a
+    whole token — preceded by start-of-text or whitespace, not immediately followed by another
+    word character, case-insensitive. Mirrors landing/src/lib/mentions.tsx's word-boundary
+    matching convention for the same product's human-facing @mentions. Names are sorted
+    longest-first so a name that's a prefix of another can't shadow the longer match.
+    """
+    if not mention_names:
+        return True
+    sorted_names = sorted(mention_names, key=len, reverse=True)
+    escaped = [re.escape(name) for name in sorted_names]
+    # ASCII-only boundary by design: Python's \w is Unicode-aware, JavaScript's is not.
+    # This must stay in sync with landing/src/lib/mentions.tsx's boundary semantics.
+    pattern = re.compile(rf"(?:^|(?<=\s))@(?:{'|'.join(escaped)})(?![A-Za-z0-9_])", re.IGNORECASE)
+    return pattern.search(text) is not None
+
+
 def emit(
     message: dict, room_id: str, agent: str, buffer_path: str, lock: FileLock,
     wake: "queue.Queue[None]",
@@ -108,11 +127,12 @@ def emit(
 
 def connect_and_stream(
     base_url: str, access_key: str, room_id: str, room_label: str | None, agent: str,
-    buffer_path: str, lock: FileLock, wake: "queue.Queue[None]", dedup: Deduper,
-    shutdown: threading.Event,
+    mention_names: list[str], buffer_path: str, lock: FileLock, wake: "queue.Queue[None]",
+    dedup: Deduper, shutdown: threading.Event,
 ) -> tuple[str, float]:
     for message in backfill(base_url, access_key, room_id, dedup):
-        emit(message, room_id, agent, buffer_path, lock, wake)
+        if should_process(message["message"], mention_names):
+            emit(message, room_id, agent, buffer_path, lock, wake)
         dedup.mark_seen(message["id"])
 
     connected_at = time.monotonic()
@@ -132,7 +152,8 @@ def connect_and_stream(
                     return "shutdown", time.monotonic() - connected_at
                 if event_type == "message":
                     if not payload["isOwn"] and dedup.is_new(payload["id"]):
-                        emit(payload, room_id, agent, buffer_path, lock, wake)
+                        if should_process(payload["message"], mention_names):
+                            emit(payload, room_id, agent, buffer_path, lock, wake)
                         dedup.mark_seen(payload["id"])
                 elif event_type == "room_expired":
                     return "expired", time.monotonic() - connected_at
@@ -147,8 +168,8 @@ def connect_and_stream(
 
 def run_ingest(
     base_url: str, access_key: str, room_id: str, room_label: str | None, agent: str,
-    buffer_path: str, lock: FileLock, wake: "queue.Queue[None]", shutdown: threading.Event,
-    exit_codes: dict[str, int],
+    mention_names: list[str], buffer_path: str, lock: FileLock, wake: "queue.Queue[None]",
+    shutdown: threading.Event, exit_codes: dict[str, int],
 ) -> None:
     """Runs the reconnect loop for one room until it expires, hits an unrecoverable auth error,
     or the process shuts down. Records this room's outcome into exit_codes[room_id], mirroring
@@ -166,8 +187,8 @@ def run_ingest(
         while not shutdown.is_set():
             try:
                 outcome, duration = connect_and_stream(
-                    base_url, access_key, room_id, room_label, agent, buffer_path, lock, wake,
-                    dedup, shutdown,
+                    base_url, access_key, room_id, room_label, agent, mention_names, buffer_path,
+                    lock, wake, dedup, shutdown,
                 )
             except AuthError as exc:
                 sys.stderr.write(

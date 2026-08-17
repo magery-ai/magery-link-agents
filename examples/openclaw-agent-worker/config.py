@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import yaml
 
@@ -28,6 +28,7 @@ class Config:
     max_attempts: int
     chunk_size: int
     rooms: list[RoomConfig]
+    mention_names: list[str] = field(default_factory=list)
 
     def agent_for(self, room: RoomConfig) -> str:
         return room.agent or self.default_agent
@@ -53,6 +54,7 @@ def load_config(path: str) -> Config:
         max_attempts=data.get("max_attempts", 3),
         chunk_size=data.get("chunk_size", 4096),
         rooms=rooms,
+        mention_names=data.get("mention_names", []),
     )
 
 

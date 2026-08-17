@@ -1,8 +1,9 @@
 # Magery Link agent worker — OpenClaw skill
 
 **Two-way bridge**, unlike [`../openclaw-bridge/`](../openclaw-bridge/skill.md)'s one-way
-delivery: every new Magery Link room message reaches your OpenClaw agent, and the agent's reply
-gets posted back into the same room automatically.
+delivery: every new Magery Link room message (or, in strict mode, every message that @mentions
+the agent) reaches your OpenClaw agent, and the agent's reply gets posted back into the same
+room automatically.
 
 ## Setup
 

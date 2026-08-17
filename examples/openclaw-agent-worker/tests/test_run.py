@@ -64,7 +64,7 @@ def test_default_invocation_spawns_one_ingest_thread_per_room_plus_one_worker_th
     config_path = _write_config(tmp_path, rooms=[
         {"room_id": "room-1", "label": "a", "agent": "agent-a"},
         {"room_id": "room-2", "label": "b", "agent": "agent-b"},
-    ])
+    ], mention_names=["Father"])
 
     created_threads = []
 
@@ -98,17 +98,17 @@ def test_default_invocation_spawns_one_ingest_thread_per_room_plus_one_worker_th
     by_room_id = {t.args[2]: t for t in ingest_threads}
     assert set(by_room_id) == {"room-1", "room-2"}
 
-    lock = ingest_threads[0].args[6]
-    wake = ingest_threads[0].args[7]
-    shutdown = ingest_threads[0].args[8]
-    exit_codes = ingest_threads[0].args[9]
+    lock = ingest_threads[0].args[7]
+    wake = ingest_threads[0].args[8]
+    shutdown = ingest_threads[0].args[9]
+    exit_codes = ingest_threads[0].args[10]
 
     expected_by_room = {"room-1": ("a", "agent-a"), "room-2": ("b", "agent-b")}
     for room_id, (label, agent) in expected_by_room.items():
         t = by_room_id[room_id]
         assert t.args == (
             config.base_url, config.access_key, room_id, label, agent,
-            config.buffer_path, lock, wake, shutdown, exit_codes,
+            config.mention_names, config.buffer_path, lock, wake, shutdown, exit_codes,
         )
 
     worker_thread = worker_threads[0]
@@ -118,7 +118,7 @@ def test_default_invocation_spawns_one_ingest_thread_per_room_plus_one_worker_th
     # (identity, not just equality) — that's the invariant the shared buffer/queue design
     # depends on.
     for t in ingest_threads:
-        assert t.args[6] is lock
-        assert t.args[7] is wake
+        assert t.args[7] is lock
+        assert t.args[8] is wake
     assert worker_thread.args[2] is lock
     assert worker_thread.args[3] is wake

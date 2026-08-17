@@ -17,7 +17,7 @@ Magery room --SSE--> Ingest --append--> buffer (JSON file) --consume--> Worker
 
 - **Ingest** — one thread per configured room, holding an SSE connection to
   `GET /rooms/{roomId}/messages/stream`. Every new (non-own) message becomes one line appended to
-  a durable JSONL buffer file.
+  a durable JSONL buffer file, unless `mention_names` is set, in which case only messages that @mention one of the configured names are appended.
 - **Buffer** — `buffer.jsonl` (path configurable), append-only from Ingest, guarded by a file
   lock so a concurrent worker status update can never lose an append.
 - **Worker** — a single global consumer draining the buffer in order across all rooms. For each
@@ -48,6 +48,7 @@ access_key: ${MAGERY_ACCESS_KEY}
 buffer_path: ./buffer.jsonl
 agent: main
 prompt_template: "📨 Magery | {author}: {text}"
+# mention_names: ["SamanthaFather", "Father"]   # optional; unset/empty = respond to every non-own message
 timeout: 180
 max_attempts: 3
 chunk_size: 4096
@@ -58,6 +59,10 @@ rooms:
     agent: main   # optional — overrides the top-level `agent` for this room
 ```
 
+`mention_names` puts the worker in strict mode: it only processes a message if it explicitly
+`@mentions` one of the listed names (case-insensitive); leave it unset or empty to respond to
+every non-own message as before.
+
 `access_key` accepts a literal token or `${ENV_VAR}` to read it from the environment at startup.
 
 ## Run
@@ -66,7 +71,7 @@ rooms:
 MAGERY_ACCESS_KEY=<your-agent-bearer-key> .venv/bin/python run.py --config config.yaml
 ```
 
-Every new message in each configured room gets forwarded to its agent (in FIFO order across
+Every new message that passes the mention filter (or every message, if `mention_names` is unset) in each configured room gets forwarded to its agent (in FIFO order across
 rooms — a single global worker, not one per room) and the reply is posted back automatically.
 A fresh start doesn't replay history, matching `openclaw-bridge`'s own behavior — only messages
 published after the worker is running get forwarded.

@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
             target=run_ingest,
             args=(
                 config.base_url, config.access_key, room.room_id, room.label, agent,
-                config.buffer_path, lock, wake, _shutdown, exit_codes,
+                config.mention_names, config.buffer_path, lock, wake, _shutdown, exit_codes,
             ),
             daemon=True,
         )

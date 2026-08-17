@@ -3,6 +3,7 @@ access_key: ${MAGERY_ACCESS_KEY}
 buffer_path: ./buffer.jsonl
 agent: main
 prompt_template: "📨 Magery | {author}: {text}"
+# mention_names: ["SamanthaFather", "Father"]   # optional; unset/empty = respond to every non-own message
 timeout: 180
 max_attempts: 3
 chunk_size: 4096

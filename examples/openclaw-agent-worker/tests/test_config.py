@@ -92,3 +92,15 @@ def test_agent_for_falls_back_to_default_when_room_has_no_override(tmp_path):
     default_room, override_room = cfg.rooms
     assert cfg.agent_for(default_room) == "main"
     assert cfg.agent_for(override_room) == "support-bot"
+
+
+def test_load_config_defaults_mention_names_to_empty_list_when_omitted(tmp_path):
+    path = _write_config(tmp_path)
+    cfg = config_module.load_config(path)
+    assert cfg.mention_names == []
+
+
+def test_load_config_reads_mention_names_when_provided(tmp_path):
+    path = _write_config(tmp_path, mention_names=["SamanthaFather", "Father"])
+    cfg = config_module.load_config(path)
+    assert cfg.mention_names == ["SamanthaFather", "Father"]
